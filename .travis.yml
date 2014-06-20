@@ -1,0 +1,15 @@
+language: erlang
+otp_release:
+  - 17.0
+  - R16B
+  - R15B03
+  - R15B02
+  - R15B01
+  - R15B
+  - R14B02
+notifications:
+  email: false
+  irc: "chat.freenode.net#leptus"
+  on_success: change
+  on_failure: change
+script: "make test"
