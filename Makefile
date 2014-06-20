@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-.PHONY: all app compile shell clean
+.PHONY: all app compile shell test dialyze clean distclean
 
 PROJECT = zeta
 OTP_VSN = $(shell erl -noshell -noinput -eval \
