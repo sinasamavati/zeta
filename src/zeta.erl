@@ -150,8 +150,8 @@ format(<<$~, $r, Fmt/binary>>, Data, Acc) ->
     Acc1 = Acc ++ [{method, Method}, {url, URL}, {version, Version}],
     format(Fmt1, Data1, Acc1);
 format(<<$~, $s, Fmt/binary>>, Data, Acc) ->
-    {<<S, T, V/binary>>, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, <<V/binary, Data1/binary>>, Acc ++ [{status, bin_to_int(<<S, T>>)}]);
+    {<<S, T, A, V/binary>>, Fmt1, Data1} = get_value(Fmt, Data),
+    format(Fmt1, <<V/binary, Data1/binary>>, Acc ++ [{status, bin_to_int(<<S, T, A>>)}]);
 format(<<$~, $b, Fmt/binary>>, Data, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     format(Fmt1, Data1, Acc ++ [{content_length, V}]);
