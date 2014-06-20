@@ -55,7 +55,7 @@ test: clean app
 	@rm -f test/*.beam
 
 dialyze: $(PLT_FILE)
-	@dialyzer +S 4 --src src --plt $(PLT_FILE) -Werror_handling \
+	dialyzer +S 4 --src src --plt $(PLT_FILE) --no_native -Werror_handling \
 		-Wrace_conditions -D_$(OTP_VSN)
 
 $(CURDIR)/%.plt:
