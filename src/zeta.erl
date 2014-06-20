@@ -44,37 +44,48 @@
                   | {content_length, integer() | binary()}
                   | {binary(), binary()}.
 -type filename() :: file:name_all().
+-type parser_fun() :: fun(() -> {ok, log_data(), parser_fun()} | eof).
 
 -export_type([fmt/0]).
 -export_type([data/0]).
 -export_type([log_data/0]).
 -export_type([filename/0]).
+-export_type([parser_fun/0]).
 
 %% -----------------------------------------------------------------------------
 %% default log format
 %% -----------------------------------------------------------------------------
 -define(LOG_FMT, <<"~h ~l ~u ~t \"~r\" ~s ~B \"~{referer}\" \"~{user-agent}\"">>).
 
--spec format(fmt(), data()) -> {ok, log_data()}.
+%% -----------------------------------------------------------------------------
+%% parse log data
+%% -----------------------------------------------------------------------------
+-spec format(fmt(), data()) -> {ok, log_data()} | {error, bad_format}.
 format(Fmt, Data) ->
-    format(to_bin(Fmt), to_bin(Data), []).
+    case (catch format(to_bin(Fmt), to_bin(Data), [])) of
+        X = {ok, _} ->
+            X;
+        _ ->
+            {error, bad_format}
+    end.
 
+%% -----------------------------------------------------------------------------
+%% parse a file in streaming fashion
+%% -----------------------------------------------------------------------------
 -spec parse_file(filename()) -> {ok, [log_data()]} | {error, any()}.
 parse_file(Filename) ->
     parse_file(?LOG_FMT, Filename).
 
--spec parse_file(fmt(), filename()) -> {ok, [log_data()]} | {error, any()}.
+-spec parse_file(fmt(), filename()) -> {ok, log_data(), parser_fun()} |
+                                       {error, any(), parser_fun()} |
+                                       {error, any()}.
 parse_file(Fmt, Filename) ->
     case file:read_file(Filename) of
         {ok, <<>>} ->
-            {ok, []};
+            {ok, [], fun() -> eof end};
         {ok, Content} ->
-            Lines = re:split(Content, <<"\n">>, [trim]),
-            Format = fun(E) ->
-                             {ok, Data} = format(Fmt, E),
-                             Data
-                     end,
-            {ok, [Format(L) || L <- Lines]};
+            Data = splitnl(Content),
+            parse(Fmt, Data);
         Else ->
             Else
     end.
@@ -86,6 +97,38 @@ parse_file(Fmt, Filename) ->
 to_bin(X) when is_binary(X) -> X;
 to_bin(X) when is_list(X) -> list_to_binary(X).
 
+%% -----------------------------------------------------------------------------
+%% parse data and generate function for parsing data in a stream way
+%% -----------------------------------------------------------------------------
+-spec parse(fmt(), [data()]) -> {ok, log_data(), parser_fun()} |
+                                {error, any(), parser_fun()} | eof.
+parse(_, []) ->
+    eof;
+parse(Fmt, [Data]) ->
+    parse(Fmt, [Data, []]);
+parse(Fmt, [Data, Rest]) ->
+    Data1 = case Rest of
+                [] -> [];
+                _ -> splitnl(Rest)
+            end,
+
+    case format(Fmt, Data) of
+        {ok, X} ->
+            {ok, X, fun() -> parse(Fmt, Data1) end};
+        {error, Reason} ->
+            {error, Reason, fun() -> parse(Fmt, Data1) end}
+    end.
+
+%% -----------------------------------------------------------------------------
+%% split with new line
+%% -----------------------------------------------------------------------------
+-spec splitnl(binary()) -> [binary()].
+splitnl(Data) ->
+    binary:split(Data, <<"\n">>, [trim]).
+
+%% -----------------------------------------------------------------------------
+%% log format parser
+%% -----------------------------------------------------------------------------
 -spec format(binary(), binary(), [term()]) -> {ok, log_data()}.
 format(<<>>, <<>>, Acc) ->
     {ok, Acc};
@@ -107,8 +150,8 @@ format(<<$~, $r, Fmt/binary>>, Data, Acc) ->
     Acc1 = Acc ++ [{method, Method}, {url, URL}, {version, Version}],
     format(Fmt1, Data1, Acc1);
 format(<<$~, $s, Fmt/binary>>, Data, Acc) ->
-    {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, Acc ++ [{status, bin_to_int(V)}]);
+    {<<S, T, V/binary>>, Fmt1, Data1} = get_value(Fmt, Data),
+    format(Fmt1, <<V/binary, Data1/binary>>, Acc ++ [{status, bin_to_int(<<S, T>>)}]);
 format(<<$~, $b, Fmt/binary>>, Data, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     format(Fmt1, Data1, Acc ++ [{content_length, V}]);

@@ -22,9 +22,12 @@
 
 -export([all/0]).
 -export([format/1]).
+-export([parse_file/1]).
+
+-include_lib("common_test/include/ct.hrl").
 
 all() ->
-    [format].
+    [format, parse_file].
 
 format(_) ->
     Fmt1 = "~h ~l ~u ~t \"~r\" ~s ~B",
@@ -52,3 +55,19 @@ format(_) ->
           {content_length, 5},
           {<<"referer">>, <<"-">>},
           {<<"user-agent">>, <<"curl/7.33.0">>}]} = zeta:format(Fmt2, L2).
+
+parse_file(Conf) ->
+    Filename = filename:join(?config(data_dir, Conf), "access.log"),
+    N = 3000,
+    helper:generate_file(Filename, N),
+    {ok, D, Fx} = zeta:parse_file(Filename),
+    io:format("~p~n", [D]),
+    Fz = fun({ok, D1, Fx1}, F, Acc) ->
+                 true = lists:member({user, <<"-">>}, D1),
+                 true = lists:member({version,<<"HTTP/1.1">>}, D1),
+                 io:format("~p~n", [D1]),
+                 F(Fx1(), F, [D1|Acc]);
+            (eof, _, Acc) ->
+                 N = length(Acc)
+         end,
+    Fz(Fx(), Fz, [D]).
