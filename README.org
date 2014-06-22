@@ -23,7 +23,8 @@
    - =~h= => host
    - =~l= => hyphen (which is skipped when parsing)
    - =~u= => user
-   - =~r= => date, time and timezone (e.g. [27/May/2014:19:28:31 +0200])
+   - =~t= => date, time and timezone (e.g. [27/May/2014:19:28:31 +0200])
+   - =~r= => request line (e.g. GET /resource HTTP/1.1)
    - =~s= => status code
    - =~b= => content-length in bytes or "-"
    - =~B= => content-length in bytes
@@ -81,7 +82,6 @@
 
     #+BEGIN_SRC erlang
     format(Fmt, Data) -> format(Fmt, Data, binary)
-
     format(Fmt, Data, TypeOrFun) -> {ok, LogData} | {error, any()}
 
     Fmt = Data = list() | binary()
@@ -108,7 +108,7 @@
     status/content_length to Integer, and it will return anything else as is
     (Binary).
 
-    By Passing a function application as the third argument, the function will
+    By passing a function application as the third argument, the function will
     be applied to each key/value and the returned value will be used in the
     LogData.
 
@@ -127,17 +127,16 @@
     Parses a file in streaming fashion.
 
     #+BEGIN_SRC erlang
-    parse_file(Filename) -> parse_file(Filename, <<"~h ~l ~u ~t \"~r\" ~s ~B
-    \"~{referer}\" \"~{user-agent}\"">>)
+    parse_file(Filename) -> parse_file(Filename, <<"~h ~l ~u ~t \"~r\" ~s ~B\"~{referer}\" \"~{user-agent}\"">>)
     parse_file(Filename, Fmt) -> parse_file(Filename, Fmt, binary)
-    parse_file(Filename, Fmt, TypeOrFun) -> {ok, LogData, ParserFun} | {error,
-    any(), ParserFun} | {error, any()}
+    parse_file(Filename, Fmt, TypeOrFun) ->
+        {ok, LogData, ParserFun} | {error, any(), ParserFun} | {error, any()}
 
     Filename = file:name_all()
     Fmt = list() | binary()
+    TypeOrFun = binary | list | auto | fun((Key = atom(), Value = binary()) -> Value1)
     LogData = LogData
-    ParserFun = fun(() -> {ok, LogData, ParserFun} | {error, any(), ParserFun} |
-    eof
+    ParserFun = fun(() -> {ok, LogData, ParserFun} | {error, any(), ParserFun} | eof
     #+END_SRC
 
     Parses the first line of the file and produces an ananymous function to
