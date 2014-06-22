@@ -23,8 +23,8 @@
 
 {application, zeta,
  [
-  {description, ""},
-  {vsn, ""},
+  {description, "HTTP access log parser library"},
+  {vsn, "0.1.0"},
   {registered, []},
   {applications, [
                   kernel,
