@@ -1,3 +1,149 @@
 * Zeta [[https://travis-ci.org/s1n4/zeta][https://travis-ci.org/s1n4/zeta.png?branch=master]]
 
-  HTTP access log parser/analyzer.
+  Zeta is an HTTP access log parser that provides a formatting syntax for
+  parsing data.
+
+** Requirement
+
+   Erlang/OTP 14 or newer.
+
+** Build
+
+   Clone the repository and run ~make~.
+
+** Formatting syntax
+
+   The formatting syntax is simillar to Apache web server access log format.
+
+   The syntax Zeta provides for parsing the Common Log Format is like this:
+   #+BEGIN_SRC
+   ~h ~l ~u ~t "~r" ~s ~B "~{referer}" "~{user-agent}"
+   #+END_SRC
+
+   - =~h= => host
+   - =~l= => hyphen (which is skipped when parsing)
+   - =~u= => user
+   - =~r= => date, time and timezone (e.g. [27/May/2014:19:28:31 +0200])
+   - =~s= => status code
+   - =~b= => content-length in bytes or "-"
+   - =~B= => content-length in bytes
+   - =~{...}= => header name
+
+** Examples
+
+   Parsing one line of data:
+
+   #+BEGIN_SRC erlang
+   > Fmt = "~h ~l ~u ~t \"~r\" ~s ~B \"~{referer}\" \"~{user-agent}\"",
+   > Data = "127.0.0.1 - - [22/Jun/2014:19:28:31 -0200] \"GET / HTTP/1.1\" 200 5 \"-\" \"curl/7.33.0\"",
+   > zeta:format(Fmt, Data).
+   {ok, [{host, <<"127.0.0.1">>},
+         {user, <<"-">>},
+         {datetime, <<"22/Jun/2014:19:28:31">>},
+         {timezone, <<"-0200">>},
+         {method, <<"GET">>},
+         {url, <<"/">>},
+         {version, <<"HTTP/1.1">>},
+         {status, <<"200">>},
+         {content_length, <<"5">>},
+         {<<"referer">>, <<"-">>},
+         {<<"user-agent">>, <<"curl/7.33.0">>}]}
+
+   > zeta:format(Fmt, Data, auto).
+   {ok, [{host, {127, 0, 0, 1}},
+         {user, <<"-">>},
+         {datetime, {{2014, 6, 22}, {19, 28, 31}}},
+         {timezone, <<"-0200">>},
+         {method, <<"GET">>},
+         {url, <<"/">>},
+         {version, <<"HTTP/1.1">>},
+         {status, 200},
+         {content_length, 5},
+         {<<"referer">>, <<"-">>},
+         {<<"user-agent">>, <<"curl/7.33.0">>}]}
+   #+END_SRC
+
+   Parsing a file in streaming fashion:
+
+   #+BEGIN_SRC erlang
+   > Fmt = "~h ~l ~u ~t \"~r\" ~s ~B \"~{referer}\" \"~{user-agent}\"",
+   > {ok, Line1, F1} = zeta:parse_file("access.log", Fmt).
+   > {ok, Line2, F2} = F1().
+   > ...
+   > eof = FX().
+
+** API
+
+*** zeta:format/2,3
+
+    Parses log data with a format.
+
+    #+BEGIN_SRC erlang
+    format(Fmt, Data) -> format(Fmt, Data, binary)
+
+    format(Fmt, Data, TypeOrFun) -> {ok, LogData} | {error, any()}
+
+    Fmt = Data = list() | binary()
+    TypeOrFun = binary | list | auto | fun((Key = atom(), Value = binary()) -> Value1)
+
+    KV = {host, binary() | list() | term()}
+       | {user, binary() | list() | term()}
+       | {datetime, binary() | list() | calendar:datetime() | term()}
+       | {timezone, binary() | list() | term()}
+       | {method, binary() | list() | term()}
+       | {url, binary() | list() | term()}
+       | {version, binary() | list() | term()}
+       | {status, binary() | list() | integer() | term()}
+       | {content_length, binary() | list() | integer() | term()}
+       | {HeaderName = binary() | list() | term(), HeaderValue = binary() | list() | term()}
+    LogData = [KV]
+    #+END_SRC
+
+    Passing =binary= or =list= as the third argument will convert values to
+    Binary or List.
+
+    By passing =auto= as the third argument, Zeta will convert host to
+    =inet:ip_address()=, datetime to =calendar:datetime()=,
+    status/content_length to Integer, and it will return anything else as is
+    (Binary).
+
+    By Passing a function application as the third argument, the function will
+    be applied to each key/value and the returned value will be used in the
+    LogData.
+
+    The following example illustrates usage of a function application.
+    #+BEGIN_SRC erlang
+    F = fun(user, _) -> nil;
+           (host, X) -> X;
+           (header_name, X) -> list_to_atom(binary_to_list(X)); %% but don't do this
+           (_, X) -> X
+        end,
+    format(Fmt, Data, F).
+    #+END_SRC
+
+*** zeta:parse_file/1,2,3
+
+    Parses a file in streaming fashion.
+
+    #+BEGIN_SRC erlang
+    parse_file(Filename) -> parse_file(Filename, <<"~h ~l ~u ~t \"~r\" ~s ~B
+    \"~{referer}\" \"~{user-agent}\"">>)
+    parse_file(Filename, Fmt) -> parse_file(Filename, Fmt, binary)
+    parse_file(Filename, Fmt, TypeOrFun) -> {ok, LogData, ParserFun} | {error,
+    any(), ParserFun} | {error, any()}
+
+    Filename = file:name_all()
+    Fmt = list() | binary()
+    LogData = LogData
+    ParserFun = fun(() -> {ok, LogData, ParserFun} | {error, any(), ParserFun} |
+    eof
+    #+END_SRC
+
+    Parses the first line of the file and produces an ananymous function to
+    parse the next line.
+    Each function call produces a function that can be called to parse the next
+    line of the file.
+
+** Author
+
+   Sina Samavati ([[https://twitter.com/sinasamavati][@sinasamavati]])
