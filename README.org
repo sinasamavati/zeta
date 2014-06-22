@@ -136,7 +136,7 @@
     Fmt = list() | binary()
     TypeOrFun = binary | list | auto | fun((Key = atom(), Value = binary()) -> Value1)
     LogData = LogData
-    ParserFun = fun(() -> {ok, LogData, ParserFun} | {error, any(), ParserFun} | eof
+    ParserFun = fun(() -> {ok, LogData, ParserFun} | {error, any(), ParserFun} | eof)
     #+END_SRC
 
     Parses the first line of the file and produces an ananymous function to
@@ -147,3 +147,7 @@
 ** Author
 
    Sina Samavati ([[https://twitter.com/sinasamavati][@sinasamavati]])
+
+** License
+
+   MIT, see LICENSE file for more details.
