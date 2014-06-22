@@ -36,7 +36,7 @@
 -type data() :: string() | binary().
 -type return_type() :: binary | list | auto.
 -type fun_application() :: fun((atom(), binary()) -> term()).
--type log_kv() :: {host, binary() | list() | term() inet:ip_address()}
+-type log_kv() :: {host, binary() | list() | term() | inet:ip_address()}
                 | {user, binary() | list() | term()}
                 | {datetime, binary() | list() | calendar:datetime() | term()}
                 | {timezone, binary() | list() | term()}
