@@ -24,30 +24,36 @@
 %% API
 %% -----------------------------------------------------------------------------
 -export([format/2]).
+-export([format/3]).
 -export([parse_file/1]).
 -export([parse_file/2]).
+-export([parse_file/3]).
 
 %% -----------------------------------------------------------------------------
 %% types
 %% -----------------------------------------------------------------------------
 -type fmt() :: string() | binary().
 -type data() :: string() | binary().
--type log_data() :: [log_data()]
-                  | {host, binary()}
-                  | {user, binary()}
-                  | {datetime, calendar:datetime()}
-                  | {timezone, binary()}
-                  | {method, binary()}
-                  | {url, binary()}
-                  | {version, binary()}
-                  | {status, non_neg_integer()}
-                  | {content_length, integer() | binary()}
-                  | {binary(), binary()}.
+-type return_type() :: binary | list | auto.
+-type fun_application() :: fun((atom(), binary()) -> term()).
+-type log_kv() :: {host, binary() | list() | term()}
+                | {user, binary() | list() | term()}
+                | {datetime, binary() | list() | calendar:datetime() | term()}
+                | {timezone, binary() | list() | term()}
+                | {method, binary() | list() | term()}
+                | {url, binary() | list() | term()}
+                | {version, binary() | list() | term()}
+                | {status, binary() | list() | integer() | term()}
+                | {content_length, binary() | list() | integer() | term()}
+                | {binary() | list() | term(), binary() | list() | term()}.
+-type log_data() :: [log_kv()].
 -type filename() :: file:name_all().
 -type parser_fun() :: fun(() -> {ok, log_data(), parser_fun()} | eof).
 
 -export_type([fmt/0]).
 -export_type([data/0]).
+-export_type([return_type/0]).
+-export_type([fun_application/0]).
 -export_type([log_data/0]).
 -export_type([filename/0]).
 -export_type([parser_fun/0]).
@@ -60,13 +66,21 @@
 %% -----------------------------------------------------------------------------
 %% parse log data
 %% -----------------------------------------------------------------------------
--spec format(fmt(), data()) -> {ok, log_data()} | {error, bad_format}.
+-spec format(fmt(), data()) -> {ok, log_data()} | {error, any()}.
 format(Fmt, Data) ->
-    case (catch format(to_bin(Fmt), to_bin(Data), [])) of
-        X = {ok, _} ->
-            X;
-        _ ->
-            {error, bad_format}
+    format(Fmt, Data, binary).
+
+%% -----------------------------------------------------------------------------
+%% parse log data and apply a function to each value
+%% -----------------------------------------------------------------------------
+-spec format(fmt(), data(), return_type() | fun_application()) ->
+                    {ok, log_data()} | {error, any()}.
+format(Fmt, Data, F) ->
+    case get_fun_application(F) of
+        {ok, F1} ->
+            format1(Fmt, Data, F1);
+        Else ->
+            Else
     end.
 
 %% -----------------------------------------------------------------------------
@@ -74,18 +88,30 @@ format(Fmt, Data) ->
 %% -----------------------------------------------------------------------------
 -spec parse_file(filename()) -> {ok, [log_data()]} | {error, any()}.
 parse_file(Filename) ->
-    parse_file(?LOG_FMT, Filename).
+    parse_file(Filename, ?LOG_FMT).
 
--spec parse_file(fmt(), filename()) -> {ok, log_data(), parser_fun()} |
+-spec parse_file(filename(), fmt()) -> {ok, log_data(), parser_fun()} |
                                        {error, any(), parser_fun()} |
                                        {error, any()}.
-parse_file(Fmt, Filename) ->
-    case file:read_file(Filename) of
-        {ok, <<>>} ->
-            {ok, [], fun() -> eof end};
-        {ok, Content} ->
-            Data = splitnl(Content),
-            parse(Fmt, Data);
+parse_file(Filename, Fmt) ->
+    parse_file(Filename, Fmt, binary).
+
+-spec parse_file(filename(), fmt(), return_type() | fun_application()) ->
+                        {ok, log_data(), parser_fun()} |
+                        {error, any(), parser_fun()} |
+                        {error, any()}.
+parse_file(Filename, Fmt, F) ->
+    case get_fun_application(F) of
+        {ok, F1} ->
+            case file:read_file(Filename) of
+                {ok, <<>>} ->
+                    {ok, [], fun() -> eof end};
+                {ok, Content} ->
+                    Data = splitnl(Content),
+                    parse(Fmt, Data, F1);
+                Else ->
+                    Else
+            end;
         Else ->
             Else
     end.
@@ -93,30 +119,52 @@ parse_file(Fmt, Filename) ->
 %% -----------------------------------------------------------------------------
 %% internal
 %% -----------------------------------------------------------------------------
+format1(Fmt, Data, F) ->
+    case (catch format(to_bin(Fmt), to_bin(Data), F, [])) of
+        X = {ok, _} ->
+            X;
+        _ ->
+            {error, bad_format}
+    end.
+
 -spec to_bin(binary() | string()) -> binary().
 to_bin(X) when is_binary(X) -> X;
 to_bin(X) when is_list(X) -> list_to_binary(X).
 
 %% -----------------------------------------------------------------------------
+%% get function application
+%% -----------------------------------------------------------------------------
+get_fun_application(binary) ->
+    {ok, fun(_, X) -> X end};
+get_fun_application(list) ->
+    {ok, fun(_, X) -> convert_to(list, X) end};
+get_fun_application(auto) ->
+    {ok, fun convert_to/2};
+get_fun_application(F) when is_function(F) ->
+    {ok, F};
+get_fun_application(_) ->
+    {error, badarg}.
+
+%% -----------------------------------------------------------------------------
 %% parse data and generate function for parsing data in a stream way
 %% -----------------------------------------------------------------------------
--spec parse(fmt(), [data()]) -> {ok, log_data(), parser_fun()} |
-                                {error, any(), parser_fun()} | eof.
-parse(_, []) ->
+-spec parse(fmt(), [data()], return_type() | fun_application()) ->
+                   {ok, log_data(), parser_fun()} | {error, any(), parser_fun()} | eof.
+parse(_, [], _) ->
     eof;
-parse(Fmt, [Data]) ->
-    parse(Fmt, [Data, []]);
-parse(Fmt, [Data, Rest]) ->
+parse(Fmt, [Data], F) ->
+    parse(Fmt, [Data, []], F);
+parse(Fmt, [Data, Rest], F) ->
     Data1 = case Rest of
                 [] -> [];
                 _ -> splitnl(Rest)
             end,
 
-    case format(Fmt, Data) of
+    case format(Fmt, Data, F) of
         {ok, X} ->
-            {ok, X, fun() -> parse(Fmt, Data1) end};
+            {ok, X, fun() -> parse(Fmt, Data1, F) end};
         {error, Reason} ->
-            {error, Reason, fun() -> parse(Fmt, Data1) end}
+            {error, Reason, fun() -> parse(Fmt, Data1, F) end}
     end.
 
 %% -----------------------------------------------------------------------------
@@ -129,41 +177,47 @@ splitnl(Data) ->
 %% -----------------------------------------------------------------------------
 %% log format parser
 %% -----------------------------------------------------------------------------
--spec format(binary(), binary(), [term()]) -> {ok, log_data()}.
-format(<<>>, <<>>, Acc) ->
+-spec format(binary(), binary(), fun_application(), [term()]) ->
+                    {ok, log_data()}.
+format(<<>>, <<>>, _, Acc) ->
     {ok, Acc};
-format(<<$~, $h, Fmt/binary>>, Data, Acc) ->
+format(<<$~, $h, Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, Acc ++ [{host, V}]);
-format(<<$~, $l, Fmt/binary>>, <<$-, Data/binary>>, Acc) ->
-    format(Fmt, Data, Acc);
-format(<<$~, $u, Fmt/binary>>, Data, Acc) ->
+    format(Fmt1, Data1, F, Acc ++ [{host, F(host, V)}]);
+format(<<$~, $l, Fmt/binary>>, <<$-, Data/binary>>, F, Acc) ->
+    format(Fmt, Data, F, Acc);
+format(<<$~, $u, Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, Acc ++ [{user, V}]);
-format(<<$~, $t, Fmt/binary>>, Data, Acc) ->
+    format(Fmt1, Data1, F, Acc ++ [{user, F(user, V)}]);
+format(<<$~, $t, Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_datetime(Fmt, Data),
-    {Datetime, Timezone} = parse_datetime(V),
-    format(Fmt1, Data1, Acc ++ [{datetime, Datetime}, {timezone, Timezone}]);
-format(<<$~, $r, Fmt/binary>>, Data, Acc) ->
+    [Datetime, Timezone] = binary:split(V, <<" ">>),
+    Acc1 = Acc ++ [{datetime, F(datetime, Datetime)},
+                   {timezone, F(timezone, Timezone)}],
+    format(Fmt1, Data1, F, Acc1);
+format(<<$~, $r, Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     [Method, URL, Version] = re:split(V, <<" ">>),
-    Acc1 = Acc ++ [{method, Method}, {url, URL}, {version, Version}],
-    format(Fmt1, Data1, Acc1);
-format(<<$~, $s, Fmt/binary>>, Data, Acc) ->
+    Acc1 = Acc ++ [{method, F(method, Method)},
+                   {url, F(url, URL)},
+                   {version, F(version, Version)}],
+    format(Fmt1, Data1, F, Acc1);
+format(<<$~, $s, Fmt/binary>>, Data, F, Acc) ->
     {<<S, T, A, V/binary>>, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, <<V/binary, Data1/binary>>, Acc ++ [{status, bin_to_int(<<S, T, A>>)}]);
-format(<<$~, $b, Fmt/binary>>, Data, Acc) ->
+    Acc1 = Acc ++ [{status, F(status, <<S, T, A>>)}],
+    format(Fmt1, <<V/binary, Data1/binary>>, F, Acc1);
+format(<<$~, $b, Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, Acc ++ [{content_length, V}]);
-format(<<$~, $B, Fmt/binary>>, Data, Acc) ->
+    format(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
+format(<<$~, $B, Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, Acc ++ [{content_length, bin_to_int(V)}]);
-format(<<$~, ${, Fmt/binary>>, Data, Acc) ->
+    format(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
+format(<<$~, ${, Fmt/binary>>, Data, F, Acc) ->
     {Name, Fmt1} = get_name(Fmt, <<>>),
     {V, Fmt2, Data1} = get_value(Fmt1, Data),
-    format(Fmt2, Data1, Acc ++ [{Name, V}]);
-format(<<H, Fmt/binary>>, <<H, Rest/binary>>, Acc) ->
-    format(Fmt, Rest, Acc).
+    format(Fmt2, Data1, F, Acc ++ [{F(header_name, Name), F(header, V)}]);
+format(<<H, Fmt/binary>>, <<H, Rest/binary>>, F, Acc) ->
+    format(Fmt, Rest, F, Acc).
 
 -spec get_value(binary(), binary()) -> {binary(), binary(), binary()}.
 get_value(Fmt, Data) ->
@@ -196,13 +250,14 @@ get_datetime(Fmt, <<$[, Data/binary>>, Acc) ->
 get_datetime(Fmt, <<H, Data/binary>>, Acc) ->
     get_datetime(Fmt, Data, <<Acc/binary, H>>).
 
--spec parse_datetime(binary()) -> {calendar:datetime(), binary()}.
+-spec parse_datetime(binary()) -> calendar:datetime().
 parse_datetime(Datetime) ->
-    {Day, Datetime1} = get_day(Datetime, <<>>),
-    {Month, Datetime2} = get_month(Datetime1, <<>>),
-    {Year, Datetime3} = get_year(Datetime2, <<>>),
-    {Time, Timezone} = get_time(Datetime3, <<>>),
-    {{{Year, Month, Day}, Time}, Timezone}.
+    {Day, Datetime1} = get_v_til($/, Datetime, <<>>),
+    {Month, Datetime2} = get_v_til($/, Datetime1, <<>>),
+    {Year, Time} = get_v_til($:, Datetime2, <<>>),
+    [H, M, S] = binary:split(Time, <<":">>, [global]),
+    {{bin_to_int(Year), month(Month), bin_to_int(Day)},
+      {bin_to_int(H), bin_to_int(M), bin_to_int(S)}}.
 
 -spec month(binary()) -> 1..12.
 month(<<"Jan">>) -> 1;
@@ -218,30 +273,33 @@ month(<<"Oct">>) -> 10;
 month(<<"Nov">>) -> 11;
 month(<<"Dec">>) -> 12.
 
--spec get_year(binary(), binary()) -> {non_neg_integer(), binary()}.
-get_year(<<$:, Datetime/binary>>, Acc) ->
-    {bin_to_int(Acc), Datetime};
-get_year(<<H, Datetime/binary>>, Acc) ->
-    get_year(Datetime, <<Acc/binary, H>>).
+-spec get_v_til(non_neg_integer(), binary(), binary()) -> {binary(), binary()}.
+get_v_til(X, <<X, Data/binary>>, Acc) ->
+    {Acc, Data};
+get_v_til(X, <<H, Data/binary>>, Acc) ->
+    get_v_til(X, Data, <<Acc/binary, H>>).
 
--spec get_month(binary(), binary()) -> {1..12, binary()}.
-get_month(<<$/, Datetime/binary>>, Acc) ->
-    {month(Acc), Datetime};
-get_month(<<H, Datetime/binary>>, Acc) ->
-    get_month(Datetime, <<Acc/binary, H>>).
-
--spec get_day(binary(), binary()) -> {non_neg_integer(), binary()}.
-get_day(<<$/, Datetime/binary>>, Acc) ->
-    {bin_to_int(Acc), Datetime};
-get_day(<<H, Datetime/binary>>, Acc) ->
-    get_day(Datetime, <<Acc/binary, H>>).
-
--spec get_time(binary(), binary()) -> {calendar:time(), binary()}.
-get_time(<<$ , Timezone/binary>>, Acc) ->
-    [H, M, S] = re:split(Acc, <<":">>),
-    {{bin_to_int(H), bin_to_int(M), bin_to_int(S)}, Timezone};
-get_time(<<H, Datetime/binary>>, Acc) ->
-    get_time(Datetime, <<Acc/binary, H>>).
+%% -----------------------------------------------------------------------------
+%% data type conversion to deal with return type
+%% -----------------------------------------------------------------------------
+-spec convert_to(atom(), term()) -> term().
+convert_to(list, X) -> binary_to_list(X);
+convert_to(integer, X) -> bin_to_int(X);
+convert_to(host, X) ->
+    case inet_parse:address(binary_to_list(X)) of
+        {ok, Host} -> Host;
+        _ -> X
+    end;
+convert_to(user, X) -> X;
+convert_to(datetime, X) -> parse_datetime(X);
+convert_to(timezone, X) -> X;
+convert_to(method, X) -> X;
+convert_to(url, X) -> X;
+convert_to(version, X) -> X;
+convert_to(status, X) -> bin_to_int(X);
+convert_to(content_length, X) -> bin_to_int(X);
+convert_to(header, X) -> X;
+convert_to(header_name, X) -> X.
 
 %% -----------------------------------------------------------------------------
 %% define bin_to_int/1

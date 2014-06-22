@@ -30,9 +30,10 @@ all() ->
     [format, parse_file].
 
 format(_) ->
+    %% -------------------------------------------------------------------------
     Fmt1 = "~h ~l ~u ~t \"~r\" ~s ~B",
     L1 = "127.0.0.1 - some_user [27/May/2014:19:28:56 +0450] \"GET /some-url HTTP/1.1\" 200 23",
-    {ok, [{host, <<"127.0.0.1">>},
+    {ok, [{host, {127, 0, 0, 1}},
           {user, <<"some_user">>},
           {datetime, {{2014, 5, 27}, {19, 28, 56}}},
           {timezone, <<"+0450">>},
@@ -40,11 +41,12 @@ format(_) ->
           {url, <<"/some-url">>},
           {version, <<"HTTP/1.1">>},
           {status, 200},
-          {content_length, 23}]} = zeta:format(Fmt1, L1),
+          {content_length, 23}]} = zeta:format(Fmt1, L1, auto),
 
+    %% -------------------------------------------------------------------------
     Fmt2 = "~h ~l ~u ~t \"~r\" ~s ~B \"~{referer}\" \"~{user-agent}\"",
     L2 = "127.0.0.1 - - [27/May/2014:19:28:31 +0450] \"GET / HTTP/1.1\" 200 5 \"-\" \"curl/7.33.0\"",
-    {ok, [{host, <<"127.0.0.1">>},
+    {ok, [{host, {127, 0, 0, 1}},
           {user, <<"-">>},
           {datetime, {{2014, 5, 27}, {19, 28, 31}}},
           {timezone, <<"+0450">>},
@@ -54,7 +56,51 @@ format(_) ->
           {status, 200},
           {content_length, 5},
           {<<"referer">>, <<"-">>},
-          {<<"user-agent">>, <<"curl/7.33.0">>}]} = zeta:format(Fmt2, L2).
+          {<<"user-agent">>, <<"curl/7.33.0">>}]} = zeta:format(Fmt2, L2, auto),
+
+    %% -------------------------------------------------------------------------
+    Fmt3 = "~h ~l ~u ~t \"~r\" ~s ~B",
+    L3 = "10.0.1.2 - - [22/Jun/214:08:13:29 +0200] \"GET /resource?p=2 HTTP/1.1\" 200 905",
+    {ok, [{host, <<"10.0.1.2">>},
+          {user, <<"-">>},
+          {datetime, <<"22/Jun/214:08:13:29">>},
+          {timezone, <<"+0200">>},
+          {method, <<"GET">>},
+          {url, <<"/resource?p=2">>},
+          {version, <<"HTTP/1.1">>},
+          {status, <<"200">>},
+          {content_length, <<"905">>}]} = zeta:format(Fmt3, L3, binary),
+
+    %% -------------------------------------------------------------------------
+    {ok, [{host, "127.0.0.1"},
+          {user, "-"},
+          {datetime, "27/May/2014:19:28:31"},
+          {timezone, "+0450"},
+          {method, "GET"},
+          {url, "/"},
+          {version, "HTTP/1.1"},
+          {status, "200"},
+          {content_length, "5"},
+          {"referer", "-"},
+          {"user-agent", "curl/7.33.0"}]} = zeta:format(Fmt2, L2, list),
+
+    %% -------------------------------------------------------------------------
+    F1 = fun(method, _) -> tada;
+            (url, _) -> "/";
+            (header_name, X) -> X;
+            (_, _) -> nil
+         end,
+    {ok, [{host, nil},
+          {user, nil},
+          {datetime, nil},
+          {timezone, nil},
+          {method, tada},
+          {url, "/"},
+          {version, nil},
+          {status, nil},
+          {content_length, nil},
+          {<<"referer">>, nil},
+          {<<"user-agent">>, nil}]} = zeta:format(Fmt2, L2, F1).
 
 parse_file(Conf) ->
     Filename = filename:join(?config(data_dir, Conf), "access.log"),
