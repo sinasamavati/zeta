@@ -71,6 +71,7 @@
    > {ok, Line2, F2} = F1().
    > ...
    > eof = FX().
+   #+END_SRC
 
 ** API
 
