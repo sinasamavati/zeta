@@ -1,0 +1,4 @@
+%% -*- mode: erlang -*-
+
+OtpVsn = list_to_atom("_" ++ lists:sublist(erlang:system_info(otp_release), 3)),
+[{erl_opts, [{d, OtpVsn}]}].
