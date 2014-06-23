@@ -9,7 +9,15 @@
 
 ** Build
 
-   Clone the repository and run ~make~.
+   Clone the repository and run ~make~ or add the following to your
+   rebar configuration file.
+
+   #+BEGIN_SRC
+   {deps, [
+           ...
+           {zeta, ".*", {git, "git://github.com/s1n4/zeta.git", "master"}}
+          ]}.
+   #+END_SRC
 
 ** Formatting syntax
 
