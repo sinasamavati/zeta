@@ -181,38 +181,38 @@ splitnl(Data) ->
                     {ok, log_data()}.
 format(<<>>, <<>>, _, Acc) ->
     {ok, Acc};
-format(<<$~, $h, Fmt/binary>>, Data, F, Acc) ->
+format(<<"~h", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     format(Fmt1, Data1, F, Acc ++ [{host, F(host, V)}]);
-format(<<$~, $l, Fmt/binary>>, <<$-, Data/binary>>, F, Acc) ->
+format(<<"~l", Fmt/binary>>, <<$-, Data/binary>>, F, Acc) ->
     format(Fmt, Data, F, Acc);
-format(<<$~, $u, Fmt/binary>>, Data, F, Acc) ->
+format(<<"~u", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     format(Fmt1, Data1, F, Acc ++ [{user, F(user, V)}]);
-format(<<$~, $t, Fmt/binary>>, Data, F, Acc) ->
+format(<<"~t", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_datetime(Fmt, Data),
     [Datetime, Timezone] = binary:split(V, <<" ">>),
     Acc1 = Acc ++ [{datetime, F(datetime, Datetime)},
                    {timezone, F(timezone, Timezone)}],
     format(Fmt1, Data1, F, Acc1);
-format(<<$~, $r, Fmt/binary>>, Data, F, Acc) ->
+format(<<"~r", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     [Method, URL, Version] = re:split(V, <<" ">>),
     Acc1 = Acc ++ [{method, F(method, Method)},
                    {url, F(url, URL)},
                    {version, F(version, Version)}],
     format(Fmt1, Data1, F, Acc1);
-format(<<$~, $s, Fmt/binary>>, Data, F, Acc) ->
+format(<<"~s", Fmt/binary>>, Data, F, Acc) ->
     {<<S, T, A, V/binary>>, Fmt1, Data1} = get_value(Fmt, Data),
     Acc1 = Acc ++ [{status, F(status, <<S, T, A>>)}],
     format(Fmt1, <<V/binary, Data1/binary>>, F, Acc1);
-format(<<$~, $b, Fmt/binary>>, Data, F, Acc) ->
+format(<<"~b", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     format(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
-format(<<$~, $B, Fmt/binary>>, Data, F, Acc) ->
+format(<<"~B", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     format(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
-format(<<$~, ${, Fmt/binary>>, Data, F, Acc) ->
+format(<<"~{", Fmt/binary>>, Data, F, Acc) ->
     {Name, Fmt1} = get_name(Fmt, <<>>),
     {V, Fmt2, Data1} = get_value(Fmt1, Data),
     format(Fmt2, Data1, F, Acc ++ [{F(header_name, Name), F(header, V)}]);
