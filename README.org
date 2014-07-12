@@ -137,8 +137,10 @@
     #+BEGIN_SRC erlang
     parse_file(Filename) ->
         parse_file(Filename, <<"~h ~l ~u ~t \"~r\" ~s ~B\"~{referer}\" \"~{user-agent}\"">>)
+
     parse_file(Filename, Fmt) ->
         parse_file(Filename, Fmt, binary)
+
     parse_file(Filename, Fmt, TypeOrFun) ->
         {ok, LogData, ParserFun} | {error, any(), ParserFun} | {error, any()}
 

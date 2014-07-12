@@ -149,7 +149,8 @@ get_fun_application(_) ->
 %% parse data and generate function for parsing data in a stream way
 %% -----------------------------------------------------------------------------
 -spec parse(fmt(), [data()], return_type() | fun_application()) ->
-                   {ok, log_data(), parser_fun()} | {error, any(), parser_fun()} | eof.
+                   {ok, log_data(), parser_fun()} |
+                   {error, any(), parser_fun()} | eof.
 parse(_, [], _) ->
     eof;
 parse(Fmt, [Data], F) ->
