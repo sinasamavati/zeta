@@ -3,3 +3,4 @@ ebin
 erl_crash.dump
 logs
 .zeta.plt
+test/zeta_SUITE_data
