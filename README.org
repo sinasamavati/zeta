@@ -45,7 +45,7 @@
    #+BEGIN_SRC erlang
    > Fmt = "~h ~l ~u ~t \"~r\" ~s ~B \"~{referer}\" \"~{user-agent}\"",
    > Data = "127.0.0.1 - - [22/Jun/2014:19:28:31 -0200] \"GET / HTTP/1.1\" 200 5 \"-\" \"curl/7.33.0\"",
-   > zeta:format(Fmt, Data).
+   > zeta:parse(Fmt, Data).
    {ok, [{host, <<"127.0.0.1">>},
          {user, <<"-">>},
          {datetime, <<"22/Jun/2014:19:28:31">>},
@@ -58,7 +58,7 @@
          {<<"referer">>, <<"-">>},
          {<<"user-agent">>, <<"curl/7.33.0">>}]}
 
-   > zeta:format(Fmt, Data, auto).
+   > zeta:parse(Fmt, Data, auto).
    {ok, [{host, {127, 0, 0, 1}},
          {user, <<"-">>},
          {datetime, {{2014, 6, 22}, {19, 28, 31}}},
@@ -84,13 +84,13 @@
 
 ** API
 
-*** zeta:format/2,3
+*** zeta:parse/2,3
 
-    Parses log data with a format.
+    Parses log data with a parse.
 
     #+BEGIN_SRC erlang
-    format(Fmt, Data) -> format(Fmt, Data, binary)
-    format(Fmt, Data, TypeOrFun) -> {ok, LogData} | {error, any()}
+    parse(Fmt, Data) -> parse(Fmt, Data, binary)
+    parse(Fmt, Data, TypeOrFun) -> {ok, LogData} | {error, any()}
 
     Fmt = Data = list() | binary()
     TypeOrFun = binary | list | auto | fun((Key = atom(), Value = binary()) -> Value1)
@@ -127,7 +127,7 @@
            (header_name, X) -> list_to_atom(binary_to_list(X)); %% but don't do this
            (_, X) -> X
         end,
-    format(Fmt, Data, F).
+    parse(Fmt, Data, F).
     #+END_SRC
 
 *** zeta:parse_file/1,2,3

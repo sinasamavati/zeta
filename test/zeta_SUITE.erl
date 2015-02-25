@@ -1,4 +1,4 @@
-%% Copyright (c) 2014 Sina Samavati <sina.samv@gmail.com>
+%% Copyright (c) 2014-2015 Sina Samavati <sina.samv@gmail.com>
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -21,15 +21,15 @@
 -module(zeta_SUITE).
 
 -export([all/0]).
--export([format/1]).
+-export([parse/1]).
 -export([parse_file/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
 all() ->
-    [format, parse_file].
+    [parse, parse_file].
 
-format(_) ->
+parse(_) ->
     %% -------------------------------------------------------------------------
     Fmt1 = "~h ~l ~u ~t \"~r\" ~s ~B",
     L1 = "127.0.0.1 - some_user [27/May/2014:19:28:56 +0450] \"GET /some-url HTTP/1.1\" 200 23",
@@ -41,7 +41,7 @@ format(_) ->
           {url, <<"/some-url">>},
           {version, <<"HTTP/1.1">>},
           {status, 200},
-          {content_length, 23}]} = zeta:format(Fmt1, L1, auto),
+          {content_length, 23}]} = zeta:parse(Fmt1, L1, auto),
 
     %% -------------------------------------------------------------------------
     Fmt2 = "~h ~l ~u ~t \"~r\" ~s ~B \"~{referer}\" \"~{user-agent}\"",
@@ -56,7 +56,7 @@ format(_) ->
           {status, 200},
           {content_length, 5},
           {<<"referer">>, <<"-">>},
-          {<<"user-agent">>, <<"curl/7.33.0">>}]} = zeta:format(Fmt2, L2, auto),
+          {<<"user-agent">>, <<"curl/7.33.0">>}]} = zeta:parse(Fmt2, L2, auto),
 
     %% -------------------------------------------------------------------------
     Fmt3 = "~h ~l ~u ~t \"~r\" ~s ~B",
@@ -69,7 +69,7 @@ format(_) ->
           {url, <<"/resource?p=2">>},
           {version, <<"HTTP/1.1">>},
           {status, <<"200">>},
-          {content_length, <<"905">>}]} = zeta:format(Fmt3, L3, binary),
+          {content_length, <<"905">>}]} = zeta:parse(Fmt3, L3, binary),
 
     %% -------------------------------------------------------------------------
     {ok, [{host, "127.0.0.1"},
@@ -82,7 +82,7 @@ format(_) ->
           {status, "200"},
           {content_length, "5"},
           {"referer", "-"},
-          {"user-agent", "curl/7.33.0"}]} = zeta:format(Fmt2, L2, list),
+          {"user-agent", "curl/7.33.0"}]} = zeta:parse(Fmt2, L2, list),
 
     %% -------------------------------------------------------------------------
     F1 = fun(method, _) -> tada;
@@ -100,7 +100,8 @@ format(_) ->
           {status, nil},
           {content_length, nil},
           {<<"referer">>, nil},
-          {<<"user-agent">>, nil}]} = zeta:format(Fmt2, L2, F1).
+          {<<"user-agent">>, nil}]} = zeta:parse(Fmt2, L2, F1),
+    ok.
 
 parse_file(Conf) ->
     Filename = filename:join(?config(data_dir, Conf), "access.log"),
@@ -116,4 +117,5 @@ parse_file(Conf) ->
             (eof, _, Acc) ->
                  N = length(Acc)
          end,
-    Fz(Fx(), Fz, [D]).
+    Fz(Fx(), Fz, [D]),
+    ok.

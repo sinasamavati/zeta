@@ -1,4 +1,4 @@
-%% Copyright (c) 2014 Sina Samavati <sina.samv@gmail.com>
+%% Copyright (c) 2014-2015 Sina Samavati <sina.samv@gmail.com>
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -23,8 +23,8 @@
 %% -----------------------------------------------------------------------------
 %% API
 %% -----------------------------------------------------------------------------
--export([format/2]).
--export([format/3]).
+-export([parse/2]).
+-export([parse/3]).
 -export([parse_file/1]).
 -export([parse_file/2]).
 -export([parse_file/3]).
@@ -66,19 +66,19 @@
 %% -----------------------------------------------------------------------------
 %% parse log data
 %% -----------------------------------------------------------------------------
--spec format(fmt(), data()) -> {ok, log_data()} | {error, any()}.
-format(Fmt, Data) ->
-    format(Fmt, Data, binary).
+-spec parse(fmt(), data()) -> {ok, log_data()} | {error, any()}.
+parse(Fmt, Data) ->
+    parse(Fmt, Data, binary).
 
 %% -----------------------------------------------------------------------------
 %% parse log data and apply a function to each value
 %% -----------------------------------------------------------------------------
--spec format(fmt(), data(), return_type() | fun_application()) ->
-                    {ok, log_data()} | {error, any()}.
-format(Fmt, Data, F) ->
+-spec parse(fmt(), data(), return_type() | fun_application()) ->
+                   {ok, log_data()} | {error, any()}.
+parse(Fmt, Data, F) ->
     case get_fun_application(F) of
         {ok, F1} ->
-            format1(Fmt, Data, F1);
+            parse1(Fmt, Data, F1);
         Else ->
             Else
     end.
@@ -107,8 +107,7 @@ parse_file(Filename, Fmt, F) ->
                 {ok, <<>>} ->
                     {ok, [], fun() -> eof end};
                 {ok, Content} ->
-                    Data = splitnl(Content),
-                    parse(Fmt, Data, F1);
+                    parse_stream(Fmt, Content, F1);
                 Else ->
                     Else
             end;
@@ -119,8 +118,10 @@ parse_file(Filename, Fmt, F) ->
 %% -----------------------------------------------------------------------------
 %% internal
 %% -----------------------------------------------------------------------------
-format1(Fmt, Data, F) ->
-    case (catch format(to_bin(Fmt), to_bin(Data), F, [])) of
+-spec parse1(fmt(), data(), return_type() | fun_application()) ->
+                    {ok, log_data()} | {error, any()}.
+parse1(Fmt, Data, F) ->
+    case (catch parse(to_bin(Fmt), to_bin(Data), F, [])) of
         X = {ok, _} ->
             X;
         _ ->
@@ -134,6 +135,8 @@ to_bin(X) when is_list(X) -> list_to_binary(X).
 %% -----------------------------------------------------------------------------
 %% get function application
 %% -----------------------------------------------------------------------------
+-spec get_fun_application(return_type()) -> {ok, fun_application()} |
+                                            {error, badarg}.
 get_fun_application(binary) ->
     {ok, fun(_, X) -> X end};
 get_fun_application(list) ->
@@ -148,77 +151,75 @@ get_fun_application(_) ->
 %% -----------------------------------------------------------------------------
 %% parse data and generate function for parsing data in a stream way
 %% -----------------------------------------------------------------------------
--spec parse(fmt(), [data()], return_type() | fun_application()) ->
-                   {ok, log_data(), parser_fun()} |
-                   {error, any(), parser_fun()} | eof.
-parse(_, [], _) ->
+-spec parse_stream(fmt(), binary(), return_type() | fun_application()) ->
+                          {ok, log_data(), parser_fun()} |
+                          {error, any(), parser_fun()} | eof.
+parse_stream(_, <<>>, _) ->
     eof;
-parse(Fmt, [Data], F) ->
-    parse(Fmt, [Data, []], F);
-parse(Fmt, [Data, Rest], F) ->
-    Data1 = case Rest of
-                [] -> [];
-                _ -> splitnl(Rest)
-            end,
-
-    case format(Fmt, Data, F) of
+parse_stream(Fmt, Stream, F) ->
+    {Data, Rest} = splitnl(Stream),
+    case parse1(Fmt, Data, F) of
         {ok, X} ->
-            {ok, X, fun() -> parse(Fmt, Data1, F) end};
+            {ok, X, fun() -> parse_stream(Fmt, Rest, F) end};
         {error, Reason} ->
-            {error, Reason, fun() -> parse(Fmt, Data1, F) end}
+            {error, Reason, fun() -> parse_stream(Fmt, Rest, F) end}
     end.
 
 %% -----------------------------------------------------------------------------
 %% split with new line
 %% -----------------------------------------------------------------------------
--spec splitnl(binary()) -> [binary()].
+-spec splitnl(binary()) -> {binary(), binary()}.
 splitnl(Data) ->
-    binary:split(Data, <<"\n">>, [trim]).
+    case binary:split(Data, <<"\n">>, [trim]) of
+        [] -> {<<>>, <<>>};
+        [H] -> {H, <<>>};
+        [H, Rest] -> {H, Rest}
+    end.
 
 %% -----------------------------------------------------------------------------
 %% log format parser
 %% -----------------------------------------------------------------------------
--spec format(binary(), binary(), fun_application(), [term()]) ->
-                    {ok, log_data()}.
-format(<<>>, <<>>, _, Acc) ->
+-spec parse(binary(), binary(), fun_application(), [term()]) ->
+                   {ok, log_data()}.
+parse(<<>>, <<>>, _, Acc) ->
     {ok, Acc};
-format(<<"~h", Fmt/binary>>, Data, F, Acc) ->
+parse(<<"~h", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, F, Acc ++ [{host, F(host, V)}]);
-format(<<"~l", Fmt/binary>>, <<$-, Data/binary>>, F, Acc) ->
-    format(Fmt, Data, F, Acc);
-format(<<"~u", Fmt/binary>>, Data, F, Acc) ->
+    parse(Fmt1, Data1, F, Acc ++ [{host, F(host, V)}]);
+parse(<<"~l", Fmt/binary>>, <<$-, Data/binary>>, F, Acc) ->
+    parse(Fmt, Data, F, Acc);
+parse(<<"~u", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, F, Acc ++ [{user, F(user, V)}]);
-format(<<"~t", Fmt/binary>>, Data, F, Acc) ->
+    parse(Fmt1, Data1, F, Acc ++ [{user, F(user, V)}]);
+parse(<<"~t", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_datetime(Fmt, Data),
     [Datetime, Timezone] = binary:split(V, <<" ">>),
     Acc1 = Acc ++ [{datetime, F(datetime, Datetime)},
                    {timezone, F(timezone, Timezone)}],
-    format(Fmt1, Data1, F, Acc1);
-format(<<"~r", Fmt/binary>>, Data, F, Acc) ->
+    parse(Fmt1, Data1, F, Acc1);
+parse(<<"~r", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     [Method, URL, Version] = re:split(V, <<" ">>),
     Acc1 = Acc ++ [{method, F(method, Method)},
                    {url, F(url, URL)},
                    {version, F(version, Version)}],
-    format(Fmt1, Data1, F, Acc1);
-format(<<"~s", Fmt/binary>>, Data, F, Acc) ->
+    parse(Fmt1, Data1, F, Acc1);
+parse(<<"~s", Fmt/binary>>, Data, F, Acc) ->
     {<<S, T, A, V/binary>>, Fmt1, Data1} = get_value(Fmt, Data),
     Acc1 = Acc ++ [{status, F(status, <<S, T, A>>)}],
-    format(Fmt1, <<V/binary, Data1/binary>>, F, Acc1);
-format(<<"~b", Fmt/binary>>, Data, F, Acc) ->
+    parse(Fmt1, <<V/binary, Data1/binary>>, F, Acc1);
+parse(<<"~b", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
-format(<<"~B", Fmt/binary>>, Data, F, Acc) ->
+    parse(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
+parse(<<"~B", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    format(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
-format(<<"~{", Fmt/binary>>, Data, F, Acc) ->
+    parse(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
+parse(<<"~{", Fmt/binary>>, Data, F, Acc) ->
     {Name, Fmt1} = get_name(Fmt, <<>>),
     {V, Fmt2, Data1} = get_value(Fmt1, Data),
-    format(Fmt2, Data1, F, Acc ++ [{F(header_name, Name), F(header, V)}]);
-format(<<H, Fmt/binary>>, <<H, Rest/binary>>, F, Acc) ->
-    format(Fmt, Rest, F, Acc).
+    parse(Fmt2, Data1, F, Acc ++ [{F(header_name, Name), F(header, V)}]);
+parse(<<H, Fmt/binary>>, <<H, Rest/binary>>, F, Acc) ->
+    parse(Fmt, Rest, F, Acc).
 
 -spec get_value(binary(), binary()) -> {binary(), binary(), binary()}.
 get_value(Fmt, Data) ->
@@ -258,7 +259,7 @@ parse_datetime(Datetime) ->
     {Year, Time} = get_v_til($:, Datetime2, <<>>),
     [H, M, S] = binary:split(Time, <<":">>, [global]),
     {{bin_to_int(Year), month(Month), bin_to_int(Day)},
-      {bin_to_int(H), bin_to_int(M), bin_to_int(S)}}.
+     {bin_to_int(H), bin_to_int(M), bin_to_int(S)}}.
 
 -spec month(binary()) -> 1..12.
 month(<<"Jan">>) -> 1;
