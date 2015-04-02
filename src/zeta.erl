@@ -185,39 +185,39 @@ parse(<<>>, <<>>, _, Acc) ->
     {ok, Acc};
 parse(<<"~h", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    parse(Fmt1, Data1, F, Acc ++ [{host, F(host, V)}]);
+    parse(Fmt1, Data1, F, [{host, F(host, V)}|Acc]);
 parse(<<"~l", Fmt/binary>>, <<$-, Data/binary>>, F, Acc) ->
     parse(Fmt, Data, F, Acc);
 parse(<<"~u", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    parse(Fmt1, Data1, F, Acc ++ [{user, F(user, V)}]);
+    parse(Fmt1, Data1, F, [{user, F(user, V)}|Acc]);
 parse(<<"~t", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_datetime(Fmt, Data),
     [Datetime, Timezone] = binary:split(V, <<" ">>),
-    Acc1 = Acc ++ [{datetime, F(datetime, Datetime)},
-                   {timezone, F(timezone, Timezone)}],
+    Acc1 = [{datetime, F(datetime, Datetime)},
+            {timezone, F(timezone, Timezone)}|Acc],
     parse(Fmt1, Data1, F, Acc1);
 parse(<<"~r", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
     [Method, URL, Version] = re:split(V, <<" ">>),
-    Acc1 = Acc ++ [{method, F(method, Method)},
-                   {url, F(url, URL)},
-                   {version, F(version, Version)}],
+    Acc1 = [{method, F(method, Method)},
+            {url, F(url, URL)},
+            {version, F(version, Version)}|Acc],
     parse(Fmt1, Data1, F, Acc1);
 parse(<<"~s", Fmt/binary>>, Data, F, Acc) ->
     {<<S, T, A, V/binary>>, Fmt1, Data1} = get_value(Fmt, Data),
-    Acc1 = Acc ++ [{status, F(status, <<S, T, A>>)}],
+    Acc1 = [{status, F(status, <<S, T, A>>)}|Acc],
     parse(Fmt1, <<V/binary, Data1/binary>>, F, Acc1);
 parse(<<"~b", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    parse(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
+    parse(Fmt1, Data1, F, [{content_length, F(content_length, V)}|Acc]);
 parse(<<"~B", Fmt/binary>>, Data, F, Acc) ->
     {V, Fmt1, Data1} = get_value(Fmt, Data),
-    parse(Fmt1, Data1, F, Acc ++ [{content_length, F(content_length, V)}]);
+    parse(Fmt1, Data1, F, [{content_length, F(content_length, V)}|Acc]);
 parse(<<"~{", Fmt/binary>>, Data, F, Acc) ->
     {Name, Fmt1} = get_name(Fmt, <<>>),
     {V, Fmt2, Data1} = get_value(Fmt1, Data),
-    parse(Fmt2, Data1, F, Acc ++ [{F(header_name, Name), F(header, V)}]);
+    parse(Fmt2, Data1, F, [{F(header_name, Name), F(header, V)}|Acc]);
 parse(<<H, Fmt/binary>>, <<H, Rest/binary>>, F, Acc) ->
     parse(Fmt, Rest, F, Acc).
 
